@@ -178,3 +178,48 @@ constructs a `Date`, or reads a locale.
   by these rules; whether it is a real instant is not checked.
 - **It reads only local files and opens no socket.** There is no remote checkpoint service, no
   transparency log client and no notarisation.
+
+## How the severity and ordering guards were measured
+
+Both guards were measured by mutation against the finished suite, because a guard that is only
+declared is a guard an edit will satisfy.
+
+**Severity, coordinated flip.** Each of the 41 rules had its severity flipped in the table in
+`src/index.mjs` **and** in the catalog above, together, and the full suite was run against the
+result. `test/severity-table.test.mjs` compares those two declarations and therefore stays green
+under exactly this edit, which is the point of the exercise.
+
+| Direction | Rules | Caught | Survived |
+| --- | ---: | ---: | ---: |
+| `error` to `warning` | 37 | 37 | 0 |
+| `warning` to `error` | 4 | 4 | 0 |
+
+**Ordering, per call site.** Each call site of `byCodeUnit` in `src/` was replaced, one at a time,
+with `new Intl.Collator('en').compare`, and the suite was run without
+`test/no-network.test.mjs` — that file scans the source for `Intl.` and would report every
+mutation as caught without any of them changing what the tool emits.
+
+| Call site | What it orders | Result |
+| --- | --- | --- |
+| `src/canonical.mjs` | object keys inside the digest | killed, 4 tests |
+| `src/coverage.mjs` | unknown checkpoint keys | killed, 1 test |
+| `src/index.mjs` `validateLimits` loop | which unknown limit is reported first | killed, 1 test |
+| `src/index.mjs` `validateLimits` message | the known-limit list in the message | survived — equivalent |
+| `src/index.mjs` `compareFindings` file | `location.file` | killed, 1 test |
+| `src/index.mjs` `compareFindings` pointer | `location.pointer` | survived — equivalent |
+| `src/index.mjs` `compareFindings` rule | `ruleId` | survived — equivalent |
+| `src/index.mjs` `compareFindings` message | `message` | survived — equivalent |
+| `src/index.mjs` option loop | which unknown option is reported first | killed, 1 test |
+| `src/records.mjs` `unknownKeys` | unknown document and record keys | killed, 2 tests |
+
+Six of the ten call sites are pinned by what the tool emits. The four that survived order values on
+which the two comparisons agree for every pair, so no test could catch the substitution;
+`test/ordering-equivalence.test.mjs` proves each one instead of leaving it as a gap:
+
+- 1681 ordered pairs of the 41 real rule ids,
+- 36 ordered pairs of the 6 real limit names,
+- 9801 ordered pairs of the 99 structural JSON Pointers, with a completeness check that the corpus
+  emits no pointer shape outside the enumerated vocabulary, and a check that at most one finding
+  per record anchors inside `details` — so a key name from a file never decides a comparison,
+- and, for the message, a check that `location.file`, `location.pointer` and `ruleId` are unique
+  together in every corpus report, so the message component never decides an order at all.
