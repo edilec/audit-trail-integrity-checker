@@ -128,3 +128,69 @@ test('evidence is only ever digests, and only their first sixteen digits', async
     }
   }
 })
+
+/**
+ * The parse-failure path, which every test above walks past.
+ *
+ * Every canary above rides inside a *parsed* record, so every assertion above
+ * is about a value the tool chose to describe. A file that does not parse never
+ * reaches that code: it is described by V8's own error message instead, and
+ * that message quotes the input -- `Unexpected token 'A', "AKIA..." is not
+ * valid JSON` -- reproducing a short file in full. Sanitising cannot repair it,
+ * because the quoted snippet is at the front of the message and `excerpt` cuts
+ * from the back.
+ */
+/**
+ * The card number is by itself a valid JSON number, so a leading letter is put
+ * in front of it to make the file unparseable while leaving the canary whole.
+ * Everything else is already not JSON.
+ */
+function unparseable(canary) {
+  try {
+    JSON.parse(canary)
+    return `x${canary}`
+  } catch {
+    return canary
+  }
+}
+
+test('an unparseable file is not quoted back by its own parse error', async () => {
+  for (const [name, canary] of Object.entries(CANARIES)) {
+    const planted = unparseable(canary)
+    const files = { [TRAIL_NAME]: planted, [CHECKPOINT_NAME]: planted }
+    const machine = await cliReport(files, WITH_CHECKPOINT)
+    const human = await cliHuman(files, WITH_CHECKPOINT)
+
+    assert.equal(
+      machine.report.findings.some((finding) => finding.ruleId === 'input-not-json'),
+      true,
+      'the file must really have failed to parse',
+    )
+
+    for (const prefix of prefixes(canary)) {
+      for (const [stream, text] of [
+        ['stdout', machine.stdout],
+        ['stderr', machine.stderr],
+        ['human stdout', human.stdout],
+        ['human stderr', human.stderr],
+      ]) {
+        assert.equal(text.includes(prefix), false, `${name}: "${prefix}" reached ${stream} through a parse error`)
+      }
+    }
+  }
+})
+
+/**
+ * The other half of the fix: a diagnostic that says nothing is a different
+ * defect. A truncated document fails deep inside the text, where V8 reports a
+ * position rather than a quotation, and that position is what a reader needs.
+ */
+test('a parse failure still says where the document went wrong', async () => {
+  const broken = `{"schemaVersion":"1","trail":"billing.eu-west-1","records":[{"sequence":1,`
+  const { report } = await cliReport({ [TRAIL_NAME]: broken })
+
+  const finding = report.findings.find((row) => row.ruleId === 'input-not-json')
+  assert.notEqual(finding, undefined)
+  assert.match(finding.message, /position \d+/)
+  assert.match(finding.message, /line \d+ column \d+/)
+})

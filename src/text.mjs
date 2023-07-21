@@ -116,6 +116,29 @@ export function excerpt(value, limit = EXCERPT_LIMIT) {
 }
 
 /**
+ * Say why a document would not parse, without reproducing any of it.
+ *
+ * V8 reports a parse failure two ways, and one of them quotes the input back:
+ * `Unexpected token 'A', "AKIAIOSFODNN7EXAMPLE" is not valid JSON`. A trail
+ * short enough to be nothing but a credential is therefore reproduced in full
+ * by its own error message, on the one path -- a malformed file -- where the
+ * content is least trusted. Sanitising does not help: `excerpt` strips control
+ * characters and cuts from the END, and the quoted snippet sits at the FRONT.
+ *
+ * The position is the useful half and carries no content, so it is kept; the
+ * quoted half is the input and never leaves this function.
+ */
+export function parseFailureDetail(error) {
+  const message = String(error?.message ?? 'could not be parsed')
+  const position = /at position \d+(?: \(line \d+ column \d+\))?/.exec(message)
+  if (position !== null) return message.slice(0, position.index + position[0].length)
+  const token = /^Unexpected token (.+?), ".*?"(?:\.\.\.)? is not valid JSON$/s.exec(message)
+  if (token !== null) return `unexpected token ${token[1]} at the start of the document`
+  if (/^Unexpected end of JSON input$/.test(message)) return message
+  return 'the document could not be parsed as JSON'
+}
+
+/**
  * The identifier alphabet: record ids, trail ids, actors, actions and targets.
  *
  * Wide enough for the spellings real audit systems use -- `evt-0001`,

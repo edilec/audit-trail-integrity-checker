@@ -34,7 +34,15 @@ import { performance } from 'node:perf_hooks'
 import { checkSequence, verifyChain } from './chain.mjs'
 import { compileCheckpoint, evaluateCoverage } from './coverage.mjs'
 import { compileTrail } from './records.mjs'
-import { byCodeUnit, decodeUtf8, excerpt, hasForbiddenCharacter, isHash, isPlainObject } from './text.mjs'
+import {
+  byCodeUnit,
+  decodeUtf8,
+  excerpt,
+  hasForbiddenCharacter,
+  isHash,
+  isPlainObject,
+  parseFailureDetail,
+} from './text.mjs'
 
 export const TOOL_ID = 'audit-trail-integrity-checker'
 export const REPORT_SCHEMA_VERSION = '1'
@@ -374,7 +382,7 @@ async function loadJson(sink, file, real, limits) {
     sink.add({
       file,
       ruleId: 'input-not-json',
-      message: `${file} is not valid JSON: ${error.message}`,
+      message: `${file} is not valid JSON: ${parseFailureDetail(error)}.`,
       suggestion: 'Validate the file with a JSON parser before re-running.',
     })
     return null
@@ -649,5 +657,6 @@ export {
 } from './records.mjs'
 export {
   EXCERPT_LIMIT, HASH_PATTERN, MAX_IDENTIFIER_LENGTH, byCodeUnit, decodeUtf8, describeValue,
-  excerpt, hasForbiddenCharacter, isHash, isIdentifier, isPlainObject, parseTimestamp,
+  excerpt, hasForbiddenCharacter, isHash, isIdentifier, isPlainObject, parseFailureDetail,
+  parseTimestamp,
 } from './text.mjs'
