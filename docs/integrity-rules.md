@@ -108,7 +108,7 @@ also withholds the pass, and a run that is incomplete exits 2 whatever its error
 | `document-invalid` | error | The trail document is not an object, declares an unknown key, or `trail` / `records` has the wrong shape. |
 | `hash-format-invalid` | error | `hash` or `previousHash` is not 64 lower-case hex digits. |
 | `identifier-invalid` | error | A record has no usable `id`. |
-| `input-not-json` | error | A file was read and is not valid JSON. The message carries the parser's position, line and column, never the snippet of the file the parser quotes back: V8 reports `Unexpected token 'A', "..." is not valid JSON`, which reproduces a short file in full. |
+| `input-not-json` | error | A file was read and is not valid JSON. The message carries the parser's offset, line and column, or the offending token alone, never the snippet of the file the parser quotes back: V8 reports `Unexpected token 'A', "..." is not valid JSON`, which reproduces a short file in full. The quoting shape is recognised before the offset is looked for, because a document whose own text reads `at position 1` puts the offset inside the quoted span; and any detail still carrying a double quote is discarded for a generic sentence. |
 | `input-not-utf8` | error | A file's bytes are not valid UTF-8. Decided by a strict decoder, never inferred from decoded text. |
 | `input-too-large` | error | A file is larger than `maxFileBytes`; it was not read. |
 | `input-unreadable` | error | A file could not be resolved, inspected or read, or is not a regular file. |

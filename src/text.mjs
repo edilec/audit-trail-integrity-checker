@@ -115,6 +115,35 @@ export function excerpt(value, limit = EXCERPT_LIMIT) {
   return `${flattened.slice(0, limit)}...`
 }
 
+const UNPARSEABLE = 'the document could not be parsed as JSON'
+
+/**
+ * Where V8 puts the offending offset. Safe: an offset says nothing about
+ * content.
+ */
+const POSITION = /at position \d+(?: \(line \d+ column \d+\))?/
+
+/**
+ * The shape that quotes the input. Recognised FIRST: a document whose own text
+ * reads `at position 1` produces `Unexpected token 'a', "at position 1" is not
+ * valid JSON`, so matching the offset first finds it inside the quoted span and
+ * slices the document back out. The `s` flag matters too -- the quoted span can
+ * contain a newline.
+ */
+const QUOTES_THE_INPUT = /^Unexpected token (.+?), (\.\.\.)?".*"(?:\.\.\.)? is not valid JSON$/s
+
+function describeParseFailure(message) {
+  const quoting = QUOTES_THE_INPUT.exec(message)
+  if (quoting !== null) {
+    const where = quoting[2] === undefined ? 'at the start of the document' : 'inside the document'
+    return `unexpected token ${quoting[1]} ${where}`
+  }
+  const position = POSITION.exec(message)
+  if (position !== null) return message.slice(0, position.index + position[0].length)
+  if (message === 'Unexpected end of JSON input') return message
+  return UNPARSEABLE
+}
+
 /**
  * Say why a document would not parse, without reproducing any of it.
  *
@@ -123,19 +152,22 @@ export function excerpt(value, limit = EXCERPT_LIMIT) {
  * short enough to be nothing but a credential is therefore reproduced in full
  * by its own error message, on the one path -- a malformed file -- where the
  * content is least trusted. Sanitising does not help: `excerpt` strips control
- * characters and cuts from the END, and the quoted snippet sits at the FRONT.
+ * characters and cuts from the END, and the quoted snippet sits at the FRONT,
+ * and the quoted window can be cut from the MIDDLE of a long document.
  *
- * The position is the useful half and carries no content, so it is kept; the
- * quoted half is the input and never leaves this function.
+ * Two things make this safe and both matter. The quoting shape is recognised
+ * before the offset is looked for, because a document whose own text reads
+ * `at position 1` defeats the other order. And the closing guard below discards
+ * any detail still carrying a double quote: across the V8 parse messages this
+ * was measured against, every message with no quoted snippet also carries no
+ * double quote at all -- it quotes JSON punctuation with apostrophes -- so a
+ * surviving double quote means a surviving snippet, whatever the branches above
+ * concluded, and the generic sentence is used instead.
  */
 export function parseFailureDetail(error) {
-  const message = String(error?.message ?? 'could not be parsed')
-  const position = /at position \d+(?: \(line \d+ column \d+\))?/.exec(message)
-  if (position !== null) return message.slice(0, position.index + position[0].length)
-  const token = /^Unexpected token (.+?), ".*?"(?:\.\.\.)? is not valid JSON$/s.exec(message)
-  if (token !== null) return `unexpected token ${token[1]} at the start of the document`
-  if (/^Unexpected end of JSON input$/.test(message)) return message
-  return 'the document could not be parsed as JSON'
+  const message = String(error?.message ?? '')
+  const detail = describeParseFailure(message)
+  return detail.includes('"') ? UNPARSEABLE : detail
 }
 
 /**
