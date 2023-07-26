@@ -146,7 +146,7 @@ const POINTER_SHAPES = Object.freeze({
   'checkpoint member': /^\/(issuedAt|recordHash|recordId|schemaVersion|sequence|signature|trail)$/,
   record: /^\/records\/\d+$/,
   'record member': /^\/records\/\d+\/(action|actor|details|hash|id|previousHash|sequence|target|timestamp)$/,
-  'detail path': /^\/records\/\d+\/details(\/[^/]+)+$/,
+  'detail path': /^\/records\/\d+\/(#\d+|action|actor|details|id|previousHash|sequence|target|timestamp)(\/#?\d+)+$/,
 })
 
 const INDEX_SAMPLE = Object.freeze([0, 1, 2, 9, 10, 11, 99, 100, 101])
@@ -194,14 +194,18 @@ test('every ordered pair of structural pointers collates exactly as it compares 
 })
 
 /**
- * The one pointer shape that carries a string from the file -- a path into
- * `details` -- can never be compared against another of its kind, because the
- * canonical walk stops at the first value it refuses and so produces at most
- * one such finding per record. Where two of them do exist they belong to
- * different records, and the record index decides the order long before any key
- * name is reached.
+ * The refusal path into a record once carried key names from the file, which
+ * made it the one pointer shape a collator could be handed an arbitrary string
+ * in. It no longer does -- a key contributes its position in canonical order,
+ * never its spelling, see `refusalPointer` -- so every segment is now drawn
+ * from the same digits and closed word list as every other shape above.
+ *
+ * The count is kept anyway, because it is the other half of the argument: the
+ * canonical walk stops at the first value it refuses, so a record produces at
+ * most one such finding, and where two exist they belong to different records
+ * whose index decides the order long before any segment below is reached.
  */
-test('at most one finding per record anchors inside details, so no key name decides an order', async () => {
+test('at most one finding per record anchors inside details, so no segment decides an order', async () => {
   for (const report of await reports()) {
     const perRecord = new Map()
     for (const finding of report.findings) {

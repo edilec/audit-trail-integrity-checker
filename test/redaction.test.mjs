@@ -323,3 +323,71 @@ test('an unrecognised parser wording that still quotes the input is refused whol
     }
   }
 })
+
+/**
+ * Keys are content too, and `details` is where the content lives.
+ *
+ * Every canary above rides in a record *value*, and the assertion that catches
+ * it is about what the tool chooses to describe. A key is different: it is
+ * written by the same producer as the value beside it, and a payload keyed by
+ * account number, email address or access token is an ordinary shape for an
+ * audit record. The refusal path through `details` used to be concatenated
+ * from those keys straight onto the finding's pointer, so `--max-detail-depth`
+ * -- a limit the operator sets, on a record the tool never even hashed --
+ * printed them to stdout and stderr past every redactor.
+ *
+ * What replaces them still has to be usable, which is why the position is
+ * asserted and not just the absence: `#0` is the first key of that object in
+ * the canonical code-unit order this package already defines, so the value is
+ * still findable by hand.
+ */
+test('a key from inside a record never reaches a pointer', async () => {
+  const canary = CANARIES['AWS example access key id']
+  const document = chain('billing.eu-west-1', [
+    event('evt-0001', { details: { [canary]: { a: { b: { c: 1 } } } } }),
+  ])
+  const files = { [TRAIL_NAME]: document, [CHECKPOINT_NAME]: checkpointAtEnd(document) }
+  const args = [...WITH_CHECKPOINT, '--max-detail-depth', '3']
+
+  const machine = await cliReport(files, args)
+  const human = await cliHuman(files, args)
+
+  const refused = machine.report.findings.find((finding) => finding.ruleId === 'detail-depth-exceeded')
+  assert.notEqual(refused, undefined, 'the record must really have been refused')
+  assert.equal(refused.location.pointer, '/records/0/details/#0/#0/#0')
+
+  for (const prefix of prefixes(canary)) {
+    for (const [stream, text] of [
+      ['stdout', machine.stdout],
+      ['stderr', machine.stderr],
+      ['human stdout', human.stdout],
+      ['human stderr', human.stderr],
+    ]) {
+      assert.equal(text.includes(prefix), false, `"${prefix}" reached ${stream} as a pointer segment`)
+    }
+  }
+})
+
+/**
+ * An array index is structure, not content -- reordering an array changes the
+ * digest, so the index is part of what the tool is talking about -- and it
+ * stays. This pins the two segment kinds apart, so a fix that redacted
+ * everything would fail here rather than quietly making the pointer useless.
+ */
+test('an array index in a refusal path is kept, a key beside it is not', async () => {
+  const canary = CANARIES['reserved example host']
+  const document = chain('billing.eu-west-1', [
+    event('evt-0001', { details: { [canary]: [0, { deep: { deeper: 1 } }] } }),
+  ])
+  const files = { [TRAIL_NAME]: document, [CHECKPOINT_NAME]: checkpointAtEnd(document) }
+  const args = [...WITH_CHECKPOINT, '--max-detail-depth', '3']
+
+  const machine = await cliReport(files, args)
+
+  const refused = machine.report.findings.find((finding) => finding.ruleId === 'detail-depth-exceeded')
+  assert.notEqual(refused, undefined)
+  assert.equal(refused.location.pointer, '/records/0/details/#0/1/#0')
+  for (const prefix of prefixes(canary)) {
+    assert.equal(machine.stdout.includes(prefix), false, `"${prefix}" reached stdout as a pointer segment`)
+  }
+})

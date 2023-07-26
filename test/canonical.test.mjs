@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { DEFAULT_LIMITS, canonicalize, hashRecord, sha256Hex } from '../src/index.mjs'
+import { DEFAULT_LIMITS, canonicalize, hashRecord, refusalPointer, sha256Hex } from '../src/index.mjs'
 
 /**
  * The canonical form, pinned by literal expected strings.
@@ -88,7 +88,10 @@ test('a structure deeper than the limit is refused rather than hashed in part', 
 
   assert.equal(result.ok, false)
   assert.equal(result.reason, 'depth')
-  assert.equal(result.path, '/a/b/c')
+  // The route is positions, never spellings: `a`, `b` and `c` are each the
+  // first key of their object once keys are in canonical order.
+  assert.deepEqual(result.path, [{ index: 0, key: 'a' }, { index: 0, key: 'b' }, { index: 0, key: 'c' }])
+  assert.equal(refusalPointer(result.path), '/#0/#0/#0')
 })
 
 test('a structure with more values than the limit is refused rather than hashed in part', () => {
@@ -102,7 +105,7 @@ test('a value the form does not define is refused, never hashed as something els
   // Nothing parsed from JSON can be one of these. They are refused anyway: a
   // digest computed over a value the format does not define is a digest nobody
   // else can reproduce.
-  assert.deepEqual(canonicalize(undefined, limits), { ok: false, reason: 'unsupported', path: '' })
+  assert.deepEqual(canonicalize(undefined, limits), { ok: false, reason: 'unsupported', path: [] })
   assert.equal(canonicalize(Number.NaN, limits).ok, false)
   assert.equal(canonicalize(Number.POSITIVE_INFINITY, limits).ok, false)
   assert.equal(canonicalize(new Map([['a', 1]]), limits).ok, false)

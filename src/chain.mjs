@@ -20,7 +20,8 @@
  * The re-check happens *after* the loop, where a `break` cannot skip it.
  */
 
-import { hashRecord } from './canonical.mjs'
+import { hashRecord, refusalPointer } from './canonical.mjs'
+import { RECORD_KEYS } from './records.mjs'
 import { excerpt } from './text.mjs'
 
 /** How much of a digest is quoted as evidence. Digests are not secrets; the records they cover are. */
@@ -59,10 +60,12 @@ export function verifyChain(sink, file, compiled, limits, budget, anchorHash) {
 
     if (!digest.ok) {
       unhashable += 1
+      // Never `record.pointer + a key from the file`: see refusalPointer.
+      const refusedAt = `${record.pointer}${refusalPointer(digest.path, RECORD_KEYS)}`
       if (digest.reason === 'depth') {
         sink.add({
           file,
-          pointer: `${record.pointer}${digest.path}`,
+          pointer: refusedAt,
           ruleId: 'detail-depth-exceeded',
           message: `This record nests deeper than the maxDetailDepth limit of ${limits.maxDetailDepth}, so its canonical form was not built and its digest is unknown rather than wrong.`,
           suggestion: 'Raise --max-detail-depth, or flatten the record.',
@@ -70,7 +73,7 @@ export function verifyChain(sink, file, compiled, limits, budget, anchorHash) {
       } else if (digest.reason === 'nodes') {
         sink.add({
           file,
-          pointer: `${record.pointer}${digest.path}`,
+          pointer: refusedAt,
           ruleId: 'too-many-detail-nodes',
           message: `This record holds more values than the maxDetailNodes limit of ${limits.maxDetailNodes}, so its canonical form was not built and its digest is unknown rather than wrong.`,
           suggestion: 'Raise --max-detail-nodes, or trim the record.',
@@ -78,7 +81,7 @@ export function verifyChain(sink, file, compiled, limits, budget, anchorHash) {
       } else {
         sink.add({
           file,
-          pointer: `${record.pointer}${digest.path}`,
+          pointer: refusedAt,
           ruleId: 'record-not-canonical',
           message: 'This record holds a value the canonical form does not define, so its digest was not computed. An uncomputed digest is unknown; it is never treated as a match.',
         })

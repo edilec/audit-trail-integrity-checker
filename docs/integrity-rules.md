@@ -156,6 +156,13 @@ constructs a `Date`, or reads a locale.
 ## Determinism
 
 - Findings are ordered by `location.file`, then `location.pointer`, then `ruleId`, then `message`.
+- A `location.pointer` is a JSON Pointer built from the tool's own vocabulary and from positions,
+  never from a string in the file. Where a finding anchors below a record member — the three rules
+  that refuse a record's canonical form — each object key contributes `#n`, its position among its
+  siblings in the canonical code-unit key order, and each array index contributes the index. A key
+  inside `details` is written by the same producer as the value beside it, so `/records/0/details/#0`
+  is what a reader gets instead of the key's spelling; sorting that object's keys by code unit and
+  taking the first of them finds the value.
 - All ordering is by UTF-16 code unit, including the object-key ordering inside the canonical form
   a digest is computed over. Locale collation varies with the ICU data a Node build carries, which
   would make a record's digest host-dependent.
@@ -220,6 +227,7 @@ which the two comparisons agree for every pair, so no test could catch the subst
 - 36 ordered pairs of the 6 real limit names,
 - 9801 ordered pairs of the 99 structural JSON Pointers, with a completeness check that the corpus
   emits no pointer shape outside the enumerated vocabulary, and a check that at most one finding
-  per record anchors inside `details` — so a key name from a file never decides a comparison,
+  per record anchors inside `details` — and no pointer carries a key name from a file at all, so
+  a key name can never decide a comparison,
 - and, for the message, a check that `location.file`, `location.pointer` and `ruleId` are unique
   together in every corpus report, so the message component never decides an order at all.

@@ -648,7 +648,7 @@ export function formatReport(report, extra = {}) {
 }
 
 export { checkSequence, verifyChain } from './chain.mjs'
-export { HASH_ALGORITHM, HASH_KEY, canonicalize, hashRecord, sha256Hex } from './canonical.mjs'
+export { HASH_ALGORITHM, HASH_KEY, canonicalize, hashRecord, refusalPointer, sha256Hex } from './canonical.mjs'
 export {
   CHECKPOINT_KEYS, CHECKPOINT_SCHEMA_VERSION, compileCheckpoint, evaluateCoverage,
 } from './coverage.mjs'

@@ -79,7 +79,9 @@ test('each record limit is enforced and named in the finding that fires', async 
   assert.equal(depth.code, 2)
   assert.equal(raised(depth.report, 'detail-depth-exceeded'), true)
   assert.match(findingsFor(depth.report, 'detail-depth-exceeded')[0].message, /maxDetailDepth limit of 2/)
-  assert.equal(findingsFor(depth.report, 'detail-depth-exceeded')[0].location.pointer, '/records/0/details/a/b')
+  // The route into `details` is key positions, never key names: see
+  // refusalPointer, and test/redaction.test.mjs for why.
+  assert.equal(findingsFor(depth.report, 'detail-depth-exceeded')[0].location.pointer, '/records/0/details/#0/#0')
 
   const nodes = await cliReport(
     { [TRAIL_NAME]: wide, [CHECKPOINT_NAME]: checkpointAtEnd(wide) },
