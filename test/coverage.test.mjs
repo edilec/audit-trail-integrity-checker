@@ -10,6 +10,7 @@ import {
   checkpointAt,
   checkpointAtEnd,
   cleanTrail,
+  cliHuman,
   cliReport,
   event,
   findingsFor,
@@ -180,4 +181,104 @@ test('the checkpoint key set is the one the tool actually reads', () => {
     [...CHECKPOINT_KEYS],
     ['issuedAt', 'recordHash', 'recordId', 'schemaVersion', 'sequence', 'signature', 'trail'],
   )
+})
+
+/**
+ * The sentence a reader acts on, checked against the block a parser acts on.
+ *
+ * `uncoveredTailRecords` starts at the whole record count and is narrowed only
+ * where coverage is granted, so it is a floor and never a claim. The human
+ * summary read it as a claim: three reachable states -- a checkpoint whose
+ * record id disagrees, one whose digest disagrees, and one that agrees with a
+ * digest this run never recomputed -- produced
+
+ *     tail coverage: through sequence null. 4 record(s) after it are in the
+ *     same position the whole trail would be in without a checkpoint.
+
+ * beside a machine block reading coveredThroughSequence: null and
+ * tailDeletionDetectable: false. "Through sequence null" is reach the run did
+ * not establish, printed in the one place a reader looks for how far the run
+ * got, and repeated in the incomplete notice that `--json` never silences.
+ */
+
+/** A trail whose second record cannot be hashed under a low --max-detail-depth. */
+function trailWithUnhashableRecord() {
+  return chain('billing.eu-west-1', [
+    event('evt-0001'),
+    event('evt-0002', { details: { a: { b: { c: 1 } } } }),
+    event('evt-0003'),
+    event('evt-0004'),
+  ])
+}
+
+test('a checkpoint that granted no coverage never reports reach it did not establish', async () => {
+  const shallow = trailWithUnhashableRecord()
+  const clean = cleanTrail()
+  const cases = {
+    'checkpoint-record-mismatch': {
+      files: trailFiles(clean, { ...checkpointAt(clean, 1), recordId: 'evt-written-elsewhere' }),
+      args: WITH_CHECKPOINT,
+    },
+    'checkpoint-hash-mismatch': {
+      files: trailFiles(clean, { ...checkpointAt(clean, 1), recordHash: 'b'.repeat(64) }),
+      args: WITH_CHECKPOINT,
+    },
+    'checkpoint-record-unverified': {
+      files: trailFiles(shallow, checkpointAt(shallow, 1)),
+      args: [...WITH_CHECKPOINT, '--max-detail-depth', '2'],
+    },
+  }
+
+  for (const [ruleId, { files, args }] of Object.entries(cases)) {
+    const human = await cliHuman(files, args)
+    const { coverage } = human.report
+
+    assert.equal(raised(human.report, ruleId), true, `${ruleId} must really be the state under test`)
+    assert.equal(coverage.checkpointApplied, true, `${ruleId}: the checkpoint really was applied`)
+    assert.equal(coverage.coveredThroughSequence, null, `${ruleId}: no coverage was granted`)
+    assert.equal(coverage.uncoveredTailRecords > 0, true, `${ruleId}: the floor is the whole trail`)
+
+    assert.equal(
+      human.stderr.includes('through sequence null'),
+      false,
+      `${ruleId}: the summary claimed reach through a sequence that does not exist`,
+    )
+    assert.match(human.stderr, /^tail coverage: none\./m, `${ruleId}: coverage is none and says so`)
+  }
+})
+
+/**
+ * The same rule stated once over the whole corpus, so a fourth state that
+ * reaches it later is caught without anyone remembering to add a case: the
+ * words "through sequence X" may only appear when the machine block records X.
+ */
+test('the coverage sentence never names a sequence the machine block does not record', async () => {
+  const clean = cleanTrail()
+  const shallow = trailWithUnhashableRecord()
+  const runs = [
+    { files: { [TRAIL_NAME]: clean }, args: [] },
+    { files: trailFiles(clean, checkpointAtEnd(clean)), args: WITH_CHECKPOINT },
+    { files: trailFiles(clean, checkpointAt(clean, 2)), args: WITH_CHECKPOINT },
+    { files: trailFiles(clean, { ...checkpointAtEnd(clean), trail: 'billing.us-east-1' }), args: WITH_CHECKPOINT },
+    { files: trailFiles(clean, { ...checkpointAt(clean, 1), recordId: 'evt-written-elsewhere' }), args: WITH_CHECKPOINT },
+    { files: trailFiles(clean, { ...checkpointAt(clean, 1), recordHash: 'b'.repeat(64) }), args: WITH_CHECKPOINT },
+    { files: trailFiles(shallow, checkpointAt(shallow, 1)), args: [...WITH_CHECKPOINT, '--max-detail-depth', '2'] },
+    { files: { [TRAIL_NAME]: clean }, args: WITH_CHECKPOINT },
+  ]
+
+  let named = 0
+  for (const { files, args } of runs) {
+    const human = await cliHuman(files, args)
+    const sentence = human.stderr.split('\n').find((line) => line.startsWith('tail coverage:'))
+    assert.notEqual(sentence, undefined)
+
+    const match = /through sequence (\S+?)[.,]/.exec(sentence)
+    if (match === null) {
+      assert.equal(human.report.coverage.coveredThroughSequence, null, `"${sentence}" withheld a sequence the run did grant`)
+      continue
+    }
+    named += 1
+    assert.equal(Number(match[1]), human.report.coverage.coveredThroughSequence, `"${sentence}" does not match the machine block`)
+  }
+  assert.equal(named > 0, true, 'the corpus must include runs that really do name a sequence')
 })

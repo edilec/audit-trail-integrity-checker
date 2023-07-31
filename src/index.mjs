@@ -621,6 +621,16 @@ export function describeCoverage(report) {
   if (!coverage.checkpointApplied) {
     return 'tail coverage: none. A checkpoint was supplied and could not be applied, so the end of this trail is unchecked.'
   }
+  // `uncoveredTailRecords` starts at the whole record count and is only
+  // narrowed when coverage is actually granted, so it is not on its own a
+  // statement that coverage reaches anywhere. Reading it as one printed
+  // "through sequence null" for a checkpoint that was matched to a record and
+  // then disagreed with it, or whose digest this run never recomputed --
+  // asserting reach on evidence the run did not obtain. The sequence is the
+  // only field that says coverage was granted, so it is the field that decides.
+  if (coverage.coveredThroughSequence === null) {
+    return 'tail coverage: none. The checkpoint was matched to a record in this file and the coverage claim was then withheld -- the record disagreed with the checkpoint, or its digest was never recomputed -- so nothing here can detect records removed from the end of this trail.'
+  }
   if (coverage.uncoveredTailRecords > 0) {
     return `tail coverage: through sequence ${coverage.coveredThroughSequence}. ${coverage.uncoveredTailRecords} record(s) after it are in the same position the whole trail would be in without a checkpoint.`
   }
