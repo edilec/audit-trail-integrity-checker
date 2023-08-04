@@ -184,3 +184,45 @@ test('a pass is reachable only when every verdict the report carries is true', a
   assert.equal(report.coverage.uncoveredTailRecords, 0)
   assert.equal(report.summary.checked > 0, true)
 })
+
+/**
+ * The one `incomplete` flag in this package that no test reached.
+ *
+ * `checkpoint-record-unverified` is raised whenever the checkpoint agrees with
+ * a digest this run never recomputed, and it was pinned only through inputs
+ * that were already incomplete for a second reason -- a record too deep to
+ * canonicalise is also a record that was never examined, and case (3) in
+ * index.mjs marks the run incomplete for that. So flipping coverage.mjs's flag
+ * to `false` left the whole suite green.
+ *
+ * This input has no second reason. Record 2 is edited in place and keeps the
+ * digest it was written with, so the run *does* examine it -- a recomputed
+ * digest that disagrees is evidence, and `checked` reaches the declared count.
+ * The checkpoint carries that same stored digest, so the checkpoint and the
+ * file agree with each other while the record itself is known to have been
+ * rewritten. The only thing left holding exit 2 is the flag: with it the run
+ * is incomplete, without it the same input is an ordinary `fail` at exit 1,
+ * and a reader is told the trail was checked and found wrong rather than that
+ * the checkpoint established nothing.
+ */
+test('a checkpoint agreeing with a stored digest that did not recompute is incomplete, not merely failed', async () => {
+  const document = cleanTrail()
+  document.records[1] = { ...document.records[1], actor: 'user:intruder' }
+  const checkpoint = checkpointAt(document, 1)
+
+  const { code, report } = await cliReport(
+    { [TRAIL_NAME]: document, [CHECKPOINT_NAME]: checkpoint },
+    WITH_CHECKPOINT,
+  )
+
+  // The second reason is really absent: every declared record was examined.
+  assert.equal(report.summary.checked, report.summary.records)
+  assert.equal(raised(report, 'records-not-all-verified'), false)
+  assert.equal(raised(report, 'record-hash-mismatch'), true)
+
+  assert.equal(raised(report, 'checkpoint-record-unverified'), true)
+  assert.equal(report.coverage.checkpointApplied, true)
+  assert.equal(report.coverage.coveredThroughSequence, null)
+  assert.equal(report.status, 'incomplete')
+  assert.equal(code, 2)
+})
