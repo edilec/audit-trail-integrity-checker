@@ -11,7 +11,7 @@ import {
   cliReport,
   event,
 } from './support.mjs'
-import { parseFailureDetail } from '../src/text.mjs'
+import { byCodeUnit, parseFailureDetail } from '../src/text.mjs'
 
 /**
  * An audit record is exactly the kind of document that carries a card number, a
@@ -19,6 +19,15 @@ import { parseFailureDetail } from '../src/text.mjs'
  * stream that is piped into a CI log and pasted into a ticket. No value from
  * inside a record is ever echoed: the pointer on a finding says where to look,
  * and the value stays in the file.
+ *
+ * Three classes of string are echoed on purpose, and saying so is part of the
+ * guarantee rather than an exception to it: a record's `id`, a trail's name,
+ * and the name of a key the tool does not know. A report that cannot name the
+ * duplicated record or the trail the checkpoint actually covers is a report
+ * nobody can act on. The list is closed, it is enumerated at the bottom of
+ * this file by planting the canary in every member of every document shape in
+ * turn, and README's non-goals states it too -- so "only these three" is a
+ * measured claim and not a recollection.
  *
  * The canaries below are published placeholders, never real credentials: the
  * example key from the AWS documentation, the standard test card number that
@@ -390,4 +399,90 @@ test('an array index in a refusal path is kept, a key beside it is not', async (
   for (const prefix of prefixes(canary)) {
     assert.equal(machine.stdout.includes(prefix), false, `"${prefix}" reached stdout as a pointer segment`)
   }
+})
+
+/**
+ * The echo boundary, enumerated rather than described.
+ *
+ * Three classes of string from a file do reach stdout and stderr, and they are
+ * there on purpose: a report that says "a record is duplicated" without saying
+ * which record, or "the checkpoint covers a different trail" without naming
+ * either trail, is a report nobody can act on. `test/sanitisation.test.mjs`
+ * plants control characters in exactly these fields for the same reason -- they
+ * are the untrusted strings this tool deliberately prints.
+ *
+ * The risk is not that they are printed. It is that the list drifts: one more
+ * field quoted into one more message, and a guarantee everybody still believes
+ * has quietly stopped being true. So the list is measured here rather than
+ * asserted field by field -- every member of every document shape gets the
+ * canary in turn, and the set that comes back must be exactly this set. A new
+ * echo fails this test, and so does an echo that silently disappears, because
+ * a stale list is the thing being guarded against.
+ */
+
+const ECHOED_ON_PURPOSE = Object.freeze([
+  'an unknown key name in a record',
+  'an unknown key name in the checkpoint',
+  'an unknown key name in the document',
+  'the record id in a record',
+  'the record id in the checkpoint',
+  'the trail name in the checkpoint',
+  'the trail name in the document',
+])
+
+function plantings(canary) {
+  const base = () => {
+    const document = chain('billing.eu-west-1', [event('evt-0001'), event('evt-0002')])
+    return { document, checkpoint: checkpointAtEnd(document) }
+  }
+  const at = (mutate) => {
+    const files = base()
+    mutate(files)
+    return { [TRAIL_NAME]: files.document, [CHECKPOINT_NAME]: files.checkpoint }
+  }
+
+  return {
+    'the record id in a record': at((f) => { f.document.records[0].id = canary }),
+    'the timestamp in a record': at((f) => { f.document.records[0].timestamp = canary }),
+    'the actor in a record': at((f) => { f.document.records[0].actor = canary }),
+    'the action in a record': at((f) => { f.document.records[0].action = canary }),
+    'the target in a record': at((f) => { f.document.records[0].target = canary }),
+    'a details value in a record': at((f) => { f.document.records[0].details = { k: canary } }),
+    'a details key in a record': at((f) => { f.document.records[0].details = { [canary]: 1 } }),
+    'the hash in a record': at((f) => { f.document.records[0].hash = canary }),
+    'the previousHash in a record': at((f) => { f.document.records[0].previousHash = canary }),
+    'an unknown key name in a record': at((f) => { f.document.records[0][canary] = 1 }),
+    'an unknown key value in a record': at((f) => { f.document.records[0].spare = canary }),
+    'the trail name in the document': at((f) => { f.document.trail = canary }),
+    'the schemaVersion in the document': at((f) => { f.document.schemaVersion = canary }),
+    'an unknown key name in the document': at((f) => { f.document[canary] = 1 }),
+    'an unknown key value in the document': at((f) => { f.document.spare = canary }),
+    'the trail name in the checkpoint': at((f) => { f.checkpoint.trail = canary }),
+    'the record id in the checkpoint': at((f) => { f.checkpoint.recordId = canary }),
+    'the recordHash in the checkpoint': at((f) => { f.checkpoint.recordHash = canary }),
+    'the issuedAt in the checkpoint': at((f) => { f.checkpoint.issuedAt = canary }),
+    'the signature in the checkpoint': at((f) => { f.checkpoint.signature = canary }),
+    'an unknown key name in the checkpoint': at((f) => { f.checkpoint[canary] = 1 }),
+    'an unknown key value in the checkpoint': at((f) => { f.checkpoint.spare = canary }),
+  }
+}
+
+test('exactly three classes of string from a file reach a stream, and they are the documented three', async () => {
+  const canary = CANARIES['AWS example access key id']
+  const echoed = []
+
+  for (const [where, files] of Object.entries(plantings(canary))) {
+    const machine = await cliReport(files, WITH_CHECKPOINT)
+    const human = await cliHuman(files, WITH_CHECKPOINT)
+    const streams = [machine.stdout, machine.stderr, human.stdout, human.stderr]
+
+    if (!streams.some((text) => text.includes(canary))) continue
+    // The human summary may never disclose something the machine report does
+    // not: a reader who pipes stdout to a parser and stderr to a log would
+    // otherwise find the log carries more than the artefact does.
+    assert.equal(machine.stdout.includes(canary), true, `${where}: a stream carried it and the report did not`)
+    echoed.push(where)
+  }
+
+  assert.deepEqual(echoed.sort(byCodeUnit), [...ECHOED_ON_PURPOSE], 'the set of strings this tool echoes has changed')
 })

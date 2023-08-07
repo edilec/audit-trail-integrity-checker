@@ -142,6 +142,16 @@ is worse than no checker:
   different key order, different whitespace — will have every record reported as edited. That is a
   serialisation disagreement, not tampering, and the definition is written out exactly so a
   producer can match it.
+- **The report names three strings from the file, and only three.** A record's `id`, a trail's
+  name, and the name of any key the tool does not know are quoted into findings on stdout and
+  stderr, because a report that cannot say *which* record is duplicated or *which* trail the
+  checkpoint covers is one nobody can act on. Nothing else from a record reaches a stream: a
+  refused value is described by its type and length, a pointer into `details` names key
+  **positions** rather than key names, evidence is only ever the first sixteen digits of a digest,
+  and a document that fails to parse is described without the parser quoting it back.
+  `test/redaction.test.mjs` measures that list by planting a canary in every member of every
+  document shape in turn, so it fails if the list grows. Treat a record id or a trail name as
+  disclosed to wherever this tool's output goes.
 - **It is not an attack tool.** It performs static verification of files it was pointed at. It does
   not probe a log service, test credentials, or attempt to produce a forged trail.
 
