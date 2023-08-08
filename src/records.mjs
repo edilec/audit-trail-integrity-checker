@@ -55,6 +55,9 @@ export const RECORD_KEYS = Object.freeze([
 /** Chain-critical members, named here so the grading above is visible in one place. */
 export const CHAIN_CRITICAL_KEYS = Object.freeze(['hash', 'id', 'previousHash', 'sequence'])
 
+/** The budget a caller that has none passes: a loop with no deadline. */
+const NO_BUDGET = Object.freeze({ exceeded: () => false })
+
 function unknownKeys(value, allowed) {
   return Object.keys(value).filter((key) => !allowed.includes(key)).sort(byCodeUnit)
 }
@@ -193,7 +196,7 @@ function compileRecord(sink, file, index, raw) {
  * `records.length` differ in that case, and the caller treats the gap as
  * missing evidence rather than as a clean result.
  */
-export function compileTrail(sink, file, value, limits) {
+export function compileTrail(sink, file, value, limits, budget = NO_BUDGET) {
   if (!isPlainObject(value)) {
     sink.add({
       file,
@@ -272,6 +275,20 @@ export function compileTrail(sink, file, value, limits) {
   const firstById = new Map()
 
   for (let index = 0; index < value.records.length; index += 1) {
+    // The budget covers this loop too. Compiling a record allocates a finding
+    // for every defect it has, so a large malformed document spends most of a
+    // run here: at the declared maximum input, `--max-runtime-ms 1` still took
+    // 10.7 seconds with nothing examined, because both verification loops
+    // stopped at once and this one ran to the end regardless.
+    //
+    // Stopping here cannot shorten a run into a pass. Records compiled stays
+    // below `declared`, and the caller compares the two after every loop --
+    // see index.mjs case (3), which is what turns the gap into an incomplete
+    // run. The `time-budget-exceeded` finding comes from checkSequence, which
+    // re-reads the budget after its own loop, so it is raised whether this
+    // loop stopped or a later one did; a flag returned from here would be a
+    // second, unfalsifiable source for the same fact.
+    if (budget.exceeded()) break
     const record = compileRecord(sink, file, index, value.records[index])
     if (record === null) continue
 

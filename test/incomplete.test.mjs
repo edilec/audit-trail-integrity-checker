@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { exitCodeFor } from '../src/index.mjs'
 import {
   CHECKPOINT_NAME,
   TRAIL_NAME,
@@ -13,6 +14,7 @@ import {
   cleanTrail,
   cliReport,
   event,
+  findingsFor,
   raised,
 } from './support.mjs'
 
@@ -92,15 +94,16 @@ test('a record that could not be examined makes the run incomplete', async () =>
 
 test('the run is incomplete when the budget stopped it, even with every record examined', async () => {
   const files = cleanFiles()
-  // Four readings inside the budget: one per record in the chain pass. The
-  // sequence pass then reads a fifth and stops. Every digest was compared, so
-  // this is the case where only the budget flag can withhold the verdict.
+  // Eight readings inside the budget: one per record in the compile pass and
+  // one per record in the chain pass. The sequence pass then reads a ninth and
+  // stops. Every record was compiled and every digest was compared, so this is
+  // the case where only the budget flag can withhold the verdict.
   const { report } = await cliReport(files, WITH_CHECKPOINT)
   assert.equal(report.status, 'pass')
 
   const stopped = await (await import('./support.mjs')).apiReport(files, {
     checkpoint: CHECKPOINT_NAME,
-    clock: budgetClock(4),
+    clock: budgetClock(8),
   })
 
   assert.equal(stopped.status, 'incomplete')
@@ -225,4 +228,44 @@ test('a checkpoint agreeing with a stored digest that did not recompute is incom
   assert.equal(report.coverage.coveredThroughSequence, null)
   assert.equal(report.status, 'incomplete')
   assert.equal(code, 2)
+})
+
+/**
+ * The budget covers the compile loop, not only the two verification loops.
+ *
+ * `--max-runtime-ms` was checked in `verifyChain` and `checkSequence` only, so
+ * `compileTrail` walked every declared record whatever the budget said and
+ * built a finding for each defect it found. At the declared maximum input --
+ * 912,320 records, 255.6 MB -- `--max-runtime-ms 1` still took 10.7 s with
+ * `checked` at 0: both loops had stopped immediately and the compile loop had
+ * run to the end anyway. A budget that does not bound the pass doing the work
+ * is not a budget.
+ *
+ * Asserted through the finding count rather than a stopwatch, which would be
+ * flaky: every record here is malformed the same way, so one `record-invalid`
+ * per compiled record is a direct count of how far the loop got.
+ */
+test('the time budget stops the compile loop as well, and never quietly shortens the run', async () => {
+  const document = chain('billing.eu-west-1', [
+    event('evt-0001', { actor: 4 }),
+    event('evt-0002', { actor: 4 }),
+    event('evt-0003', { actor: 4 }),
+    event('evt-0004', { actor: 4 }),
+  ])
+  const files = { [TRAIL_NAME]: document, [CHECKPOINT_NAME]: checkpointAtEnd(document) }
+  const { apiReport } = await import('./support.mjs')
+
+  const unbudgeted = await apiReport(files, { checkpoint: CHECKPOINT_NAME })
+  assert.equal(findingsFor(unbudgeted, 'record-invalid').length, 4, 'every record must really be malformed')
+
+  // No readings inside the budget: the compile loop is over before its first
+  // record.
+  const stopped = await apiReport(files, { checkpoint: CHECKPOINT_NAME, clock: budgetClock(0) })
+
+  assert.equal(findingsFor(stopped, 'record-invalid').length, 0, 'the compile loop ran past the budget')
+  assert.equal(stopped.summary.checked, 0)
+  assert.equal(raised(stopped, 'time-budget-exceeded'), true)
+  assert.equal(raised(stopped, 'records-not-all-verified'), true)
+  assert.equal(stopped.status, 'incomplete')
+  assert.equal(exitCodeFor(stopped), 2)
 })

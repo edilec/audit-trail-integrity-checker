@@ -53,7 +53,12 @@ Options:
   --max-file-bytes N     Maximum bytes per document (default 16777216)
   --max-detail-depth N   Maximum nesting inside one record (default 8)
   --max-detail-nodes N   Maximum values inside one record (default 500)
-  --max-runtime-ms N     Time budget for the verification (default 20000)
+  --max-runtime-ms N     Time budget, checked between records in each of the
+                         three record loops: compile, chain, sequence. It is
+                         not a hard deadline -- a run overshoots by the cost
+                         of the record in hand plus assembling the report --
+                         and a run that passes it is incomplete, never a
+                         shorter pass (default 20000)
   --max-findings N       Maximum findings in one report (default 1000)
   -h, --help             Show this help
   -v, --version          Show the version

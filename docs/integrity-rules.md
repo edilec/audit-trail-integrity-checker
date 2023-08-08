@@ -153,6 +153,12 @@ a one-character typo cannot disable a bound.
 The time budget is read from an injected clock. Nothing in this package calls `Date.now`,
 constructs a `Date`, or reads a locale.
 
+`maxRuntimeMs` is checked between records in each of the three record loops — compile, chain,
+sequence — and it is a budget rather than a deadline: a run overshoots it by the cost of the record
+in hand plus assembling the report, and the report's size is bounded separately by `maxFindings`.
+Every loop leaves fewer records examined than the document declares when it stops, which is what
+makes the run incomplete; a budget can never turn a long run into a short pass.
+
 ## Determinism
 
 - Findings are ordered by `location.file`, then `location.pointer`, then `ruleId`, then `message`.
