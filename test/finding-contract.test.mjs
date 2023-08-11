@@ -158,10 +158,20 @@ test('a rule with no severity in the table throws rather than defaulting', () =>
 })
 
 test('stdout is the serialized report and nothing else', async () => {
-  const { stdout, report } = await cliReport(cleanFiles(), WITH_CHECKPOINT)
+  // An input carrying findings of both severities, so a binary that filtered
+  // one of them out is caught as well as one that decorated the envelope.
+  const document = cleanTrail()
+  document.records[1] = { ...document.records[1], actor: 'user:intruder' }
+  const files = { [TRAIL_NAME]: document }
+  const { stdout, report } = await cliReport(files, [])
 
+  assert.equal(new Set(report.findings.map((finding) => finding.severity)).size, 2)
   assert.equal(stdout, `${serializeReport(report)}\n`)
-  assert.deepEqual(JSON.parse(stdout), report)
+  // `report` above is `JSON.parse(stdout)`, so comparing the two would compare
+  // a value with itself. The report the exported function builds for the same
+  // input is an independent value, and comparing against it is what catches a
+  // binary that decorates, filters or re-keys the report on its way to stdout.
+  assert.deepEqual(JSON.parse(stdout), await apiReport(files))
 })
 
 test('the same inputs produce byte-identical stdout on a second run', async () => {

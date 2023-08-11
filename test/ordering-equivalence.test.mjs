@@ -25,19 +25,40 @@ import { CHECKPOINT_NAME, TRAIL_NAME, apiReport, chain, checkpointAt, checkpoint
 
 const collator = new Intl.Collator('en')
 
-function everyOrderedPairAgrees(values, label) {
-  let compared = 0
+/**
+ * Every ordered pair on which the two comparisons disagree, and nothing else.
+ *
+ * The earlier shape of this helper asserted inside the loop and returned the
+ * number of pairs it had walked, which it incremented unconditionally -- so
+ * `assert.equal(everyOrderedPairAgrees(values), values.length ** 2)` compared a
+ * counter against the only value it could hold. It could not fail, and it read
+ * exactly like the assertion that carries the proof.
+ *
+ * Returning the disagreements instead puts the claim in the caller, where a
+ * disagreement is a value the assertion can show rather than a throw from
+ * inside a helper.
+ */
+function orderedPairsThatDisagree(values) {
+  const disagreements = []
   for (const left of values) {
     for (const right of values) {
-      assert.equal(
-        Math.sign(byCodeUnit(left, right)),
-        Math.sign(collator.compare(left, right)),
-        `${label}: "${left}" vs "${right}" would move under collation`,
-      )
-      compared += 1
+      if (Math.sign(byCodeUnit(left, right)) !== Math.sign(collator.compare(left, right))) {
+        disagreements.push(`"${left}" vs "${right}"`)
+      }
     }
   }
-  return compared
+  return disagreements
+}
+
+/**
+ * The size of the enumeration, asserted against the literal `docs/integrity-
+ * rules.md` publishes. A proof over 1681 pairs that quietly became a proof over
+ * 1600 because a rule was dropped is a weaker proof than the document claims,
+ * and this is the line that says so.
+ */
+function assertEnumerated(values, pairs, label) {
+  assert.equal(new Set(values).size, values.length, `${label}: a duplicate would shrink the enumeration`)
+  assert.equal(values.length ** 2, pairs, `${label}: the enumeration is no longer the ${pairs} pairs the docs claim`)
 }
 
 const cp = (document, overrides) => checkpointAtEnd(document, overrides)
@@ -125,14 +146,16 @@ test('every ordered pair of real rule ids collates exactly as it compares by cod
 
   assert.equal(ruleIds.length > 30, true, 'the catalog must be the real one for this to prove anything')
   for (const ruleId of ruleIds) assert.match(ruleId, /^[a-z][a-z0-9-]*[a-z0-9]$/, 'the alphabet this proof rests on')
-  assert.equal(everyOrderedPairAgrees(ruleIds, 'rule id'), ruleIds.length ** 2)
+  assertEnumerated(ruleIds, 1681, 'rule id')
+  assert.deepEqual(orderedPairsThatDisagree(ruleIds), [], 'these rule ids would move under collation')
 })
 
 test('every ordered pair of real limit names collates exactly as it compares by code unit', () => {
   const names = Object.keys(DEFAULT_LIMITS)
 
   assert.equal(names.length, 6)
-  assert.equal(everyOrderedPairAgrees(names, 'limit name'), names.length ** 2)
+  assertEnumerated(names, 36, 'limit name')
+  assert.deepEqual(orderedPairsThatDisagree(names), [], 'these limit names would move under collation')
 })
 
 /**
@@ -190,7 +213,8 @@ test('every ordered pair of structural pointers collates exactly as it compares 
   const pointers = structuralPointers()
 
   assert.equal(pointers.length > 90, true)
-  assert.equal(everyOrderedPairAgrees(pointers, 'pointer'), pointers.length ** 2)
+  assertEnumerated(pointers, 9801, 'pointer')
+  assert.deepEqual(orderedPairsThatDisagree(pointers), [], 'these pointers would move under collation')
 })
 
 /**
