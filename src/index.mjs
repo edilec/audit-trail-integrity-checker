@@ -508,7 +508,7 @@ export async function checkAuditTrail(options = {}) {
 
   const compiled = parsed.trail === null
     ? null
-    : compileTrail(sink, names.trail, parsed.trail.value, limits)
+    : compileTrail(sink, names.trail, parsed.trail.value, limits, budget)
 
   const checkpoint = names.checkpoint === null || parsed.checkpoint === null
     ? null
