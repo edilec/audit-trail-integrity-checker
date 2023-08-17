@@ -20,4 +20,27 @@ interface: renaming one is a breaking change and is recorded here.
 - Examples covering a trail that passes, a trail with three separate defects, and a trail with no
   checkpoint whose verdict is identical before and after its tail is deleted.
 
+### Fixed
+
+- A parse error no longer quotes the document it failed on. V8 embeds the input in its message, and
+  the earlier helper looked for `at position N` before recognising the quoting shape, so a document
+  whose own text reads `at position 1` was sliced back out onto stdout and stderr. The quoting shape
+  is now recognised first, and any detail still carrying a double quote is discarded.
+- `location.pointer` no longer carries a key name from the file. A refusal inside `details` built
+  its pointer from raw keys, so a record keyed by a credential printed it past every redactor; a key
+  now contributes its position in canonical order.
+- The human coverage sentence no longer reads `tail coverage: through sequence null`. It read
+  `uncoveredTailRecords`, which is a floor rather than a claim; `coveredThroughSequence` decides.
+- `--max-runtime-ms` now bounds the compile loop as well as the two verification loops. It was
+  checked only during verification, so a large malformed trail ran to the end of compilation
+  whatever the budget said.
+
+### Documented
+
+- README's non-goals names the three strings this tool echoes from a file -- a record id, a trail
+  name, and an unknown key's name -- and `test/redaction.test.mjs` measures that list rather than
+  restating it.
+- `--help` describes the time budget as a budget checked between records in three loops, not as a
+  deadline for the verification.
+
 No release has been published.
