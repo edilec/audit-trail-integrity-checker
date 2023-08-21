@@ -137,6 +137,9 @@ const CORPUS = Object.freeze([
   () => apiReport({ [TRAIL_NAME]: 'x\n' }),
   () => apiReport({}),
   () => apiReport({ [TRAIL_NAME]: cleanTrail() }, { limits: { maxFileBytes: 10 } }),
+  // One name for both inputs: the only way two findings reach the message
+  // component of the sort key with the first three already equal.
+  () => apiReport({}, { trail: 'gone.json', checkpoint: 'gone.json' }),
 ])
 
 const reports = async () => Promise.all(CORPUS.map((build) => build()))
@@ -242,14 +245,38 @@ test('at most one finding per record anchors inside details, so no segment decid
 })
 
 /**
- * The message is the last component of the documented sort key, and no two
- * findings ever reach it: the first three components are already unique. A
- * collator there cannot change an order that was decided before it was called.
+ * The message is the last component of the documented sort key, and it decides
+ * nothing -- but not for the reason this file used to give.
+ *
+ * The premise was that the first three components are always unique, which is
+ * not true universally: naming one file as both inputs makes the two resolve
+ * attempts produce two `input-unreadable` findings at the same file, the same
+ * empty pointer and the same rule id.
+ *
+ *     --trail gone.json --checkpoint gone.json
+ *     gone.json could not be resolved inside --root: ENOENT.   (twice)
+ *
+ * The conclusion survives, and the reason is the second assertion below: where
+ * the first three components do collide, the messages are byte-identical, so
+ * every comparator returns 0 on them and none of them can decide anything. The
+ * colliding input is in the corpus, so this is measured rather than argued.
  */
-test('file, pointer and rule id are unique together, so the message never decides an order', async () => {
+test('where file, pointer and rule id collide the messages are identical, so the message decides nothing', async () => {
+  let collisions = 0
+
   for (const report of await reports()) {
-    const keys = report.findings.map((finding) =>
-      JSON.stringify([finding.location.file, finding.location.pointer, finding.ruleId]))
-    assert.equal(new Set(keys).size, keys.length, 'two findings shared the first three components of the sort key')
+    const byKey = new Map()
+    for (const finding of report.findings) {
+      const key = JSON.stringify([finding.location.file, finding.location.pointer, finding.ruleId])
+      const seen = byKey.get(key)
+      if (seen === undefined) {
+        byKey.set(key, finding.message)
+        continue
+      }
+      collisions += 1
+      assert.equal(finding.message, seen, `two findings share ${key} and differ in the one component left to compare`)
+    }
   }
+
+  assert.equal(collisions > 0, true, 'the corpus must contain the colliding input, or this proves nothing')
 })

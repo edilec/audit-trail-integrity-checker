@@ -235,5 +235,9 @@ which the two comparisons agree for every pair, so no test could catch the subst
   emits no pointer shape outside the enumerated vocabulary, and a check that at most one finding
   per record anchors inside `details` — and no pointer carries a key name from a file at all, so
   a key name can never decide a comparison,
-- and, for the message, a check that `location.file`, `location.pointer` and `ruleId` are unique
-  together in every corpus report, so the message component never decides an order at all.
+- and, for the message, a check that wherever `location.file`, `location.pointer` and `ruleId` do
+  collide, the two messages are byte-identical, so every comparator returns 0 on them and the
+  message component decides nothing. They are usually unique — but not always: naming one file as
+  both `--trail` and `--checkpoint` produces two `input-unreadable` findings at the same file, the
+  same empty pointer and the same rule id, and that input is in the corpus so the check is measured
+  rather than argued.
