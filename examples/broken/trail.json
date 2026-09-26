@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1",
+  "trail": "billing.eu-west-1",
+  "records": [
+    {
+      "sequence": 1,
+      "id": "evt-2026-0001",
+      "timestamp": "2026-01-02T09:00:00.000Z",
+      "actor": "svc-audit",
+      "action": "trail.opened",
+      "previousHash": null,
+      "hash": "a74950376b9f3a0c83216f0999f6aabf659593d8cc47cd83fd74780773ce152b"
+    },
+    {
+      "sequence": 2,
+      "id": "evt-2026-0002",
+      "timestamp": "2026-01-02T09:14:22.100Z",
+      "actor": "svc-billing",
+      "action": "invoice.issued",
+      "target": "invoice:8841",
+      "details": {
+        "X-Request-Id": "req-7f3c91",
+        "actor_ip": "198.51.100.24",
+        "amountMinor": 429900,
+        "currency": "EUR"
+      },
+      "previousHash": "a74950376b9f3a0c83216f0999f6aabf659593d8cc47cd83fd74780773ce152b",
+      "hash": "65c789313986dc8cef24077f9258fb54f4d68c84214bf23586be96b423029987"
+    },
+    {
+      "sequence": 3,
+      "id": "evt-2026-0003",
+      "timestamp": "2026-01-02T09:31:05.640Z",
+      "actor": "user:controller-07",
+      "action": "invoice.approved",
+      "target": "invoice:8841",
+      "details": {
+        "X-Request-Id": "req-7f3d02",
+        "actor_ip": "198.51.100.31",
+        "approvalTier": 1
+      },
+      "previousHash": "65c789313986dc8cef24077f9258fb54f4d68c84214bf23586be96b423029987",
+      "hash": "d60857ed3d716ccefa2915d4f34065726c64ba2ffdd1721bcdeb12e51b5cd68a"
+    },
+    {
+      "sequence": 4,
+      "id": "evt-2026-0004",
+      "timestamp": "2026-01-02T09:31:09.880Z",
+      "actor": "svc-payments",
+      "action": "payment.dispatched",
+      "target": "invoice:8841",
+      "details": {
+        "amountMinor": 429900,
+        "currency": "EUR",
+        "rail": "sepa"
+      },
+      "previousHash": "9b6b43f453bbf3058c20ce99824d81c32d194ca93e460473068c0968230140af",
+      "hash": "897df19b1cd3a241114a9e865ff96142a10955ebdcd0435431cbfd0343ad3506"
+    },
+    {
+      "sequence": 9,
+      "id": "evt-2026-0005",
+      "timestamp": "2026-01-02T11:02:44.005Z",
+      "actor": "svc-payments",
+      "action": "invoice.settled",
+      "target": "invoice:8841",
+      "previousHash": "897df19b1cd3a241114a9e865ff96142a10955ebdcd0435431cbfd0343ad3506",
+      "hash": "ccbe0261cf1a31d1654ae5529b1a55bacc31b25e3e39049284ee88ca0da915c6"
+    }
+  ]
+}
